@@ -2,7 +2,7 @@
 
 BASEPATH=`dirname $(readlink -f ${BASH_SOURCE[0]})` && cd $BASEPATH
 
-name="redbook-scraper-chromium"
+name="twitter-scraper-chromium"
 docker rm -f ${name}
 
 ## file port
