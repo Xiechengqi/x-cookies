@@ -68,8 +68,11 @@ def build_cookie_payload(cookie_values: Dict[str, str]) -> List[Dict[str, str]]:
     one_month = get_future_date(30)
     payload = []
     for name in COOKIE_NAMES:
+        value = cookie_values.get(name, "")
+        if not value:
+            continue
         expires = one_month if name in {"personalization_id", "kdt"} else one_week
-        payload.append(create_cookie_template(name, cookie_values.get(name, ""), expires))
+        payload.append(create_cookie_template(name, value, expires))
     return payload
 
 
@@ -237,15 +240,12 @@ def main():
                     logger.error("登录失败，无法提取 Cookies")
                     return
             cookies = extract_cookies(context)
-            missing = [name for name, value in cookies.items() if not value]
-            if missing:
-                logger.error(
-                    f"检测到缺失 Cookie：{', '.join(missing)}，跳过写入及测试"
-                )
-                return
             payload = build_cookie_payload(cookies)
-            cookie_path = save_cookies(username, payload)
-            run_scraper_smoke_test(cookie_path, username)
+            if not payload:
+                logger.error("所有目标 Cookie 均为空，跳过写入与测试")
+            else:
+                cookie_path = save_cookies(username, payload)
+                run_scraper_smoke_test(cookie_path, username)
         except Exception as exc:
             logger.exception(f"提取 Cookies 失败：{exc}")
         finally:
