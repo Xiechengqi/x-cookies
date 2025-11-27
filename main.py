@@ -237,6 +237,12 @@ def main():
                     logger.error("登录失败，无法提取 Cookies")
                     return
             cookies = extract_cookies(context)
+            missing = [name for name, value in cookies.items() if not value]
+            if missing:
+                logger.error(
+                    f"检测到缺失 Cookie：{', '.join(missing)}，跳过写入及测试"
+                )
+                return
             payload = build_cookie_payload(cookies)
             cookie_path = save_cookies(username, payload)
             run_scraper_smoke_test(cookie_path, username)
