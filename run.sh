@@ -24,7 +24,7 @@ docker run -itd \
   -v ${PWD}/user-data:/app/chromium/user-data \
   -v ${PWD}/main.py:/app/scripts/main.py \
   -v ${PWD}/twitter-scraper:/app/scripts/twitter-scraper \
-  -e CHROMIUM_PROXY_SERVER=socks5://192.168.1.15:1080
+  -e CHROMIUM_PROXY_SERVER=socks5://192.168.1.15:1080 \
   -e TERMINAL_RPOXY=socks5://192.168.1.15:1080 \
   -e LANG=C.UTF-8 \
   -e UV_DEFAULT_INDEX=https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple \
