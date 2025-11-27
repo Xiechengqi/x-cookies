@@ -329,6 +329,10 @@ func resolveOutputDir() string {
 	return first
 }
 
+func resolveAccountEnv() string {
+	return os.Getenv("X_ACCOUNT")
+}
+
 func defaultCookiePath(account string) string {
 	if account == "" {
 		return ""
@@ -344,7 +348,7 @@ func resolveCookieFile(flagValue string) string {
 	if env := os.Getenv("TWITTER_COOKIE_FILE"); env != "" {
 		return env
 	}
-	return defaultCookiePath(os.Getenv("TWITTER_ACCOUNT"))
+	return defaultCookiePath(resolveAccountEnv())
 }
 
 func resolveQuery(flagValue string) string {
@@ -354,7 +358,7 @@ func resolveQuery(flagValue string) string {
 	if env := os.Getenv("SCRAPER_TEST_QUERY"); env != "" {
 		return env
 	}
-	if account := os.Getenv("TWITTER_ACCOUNT"); account != "" {
+	if account := resolveAccountEnv(); account != "" {
 		return fmt.Sprintf("from:%s", account)
 	}
 	return ""

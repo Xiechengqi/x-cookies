@@ -156,11 +156,16 @@ def run_scraper_smoke_test(cookie_path: Path, username: str):
 
     query = os.getenv("SCRAPER_TEST_QUERY") or f"from:{username}"
     count = os.getenv("SCRAPER_TEST_COUNT", "5")
+    binary_path = PROJECT_ROOT / "twitter-scraper" / "twitter-scraper"
+
+    if not binary_path.exists():
+        logger.error(
+            f"未找到 twitter-scraper 二进制：{binary_path}，请先运行 twitter-scraper/build.sh"
+        )
+        raise FileNotFoundError(f"twitter-scraper binary missing at {binary_path}")
 
     cmd = [
-        "go",
-        "run",
-        "./twitter-scraper/main.go",
+        str(binary_path),
         "-cookies",
         str(cookie_path),
         "-query",
@@ -170,8 +175,12 @@ def run_scraper_smoke_test(cookie_path: Path, username: str):
         "-json",
     ]
 
+    proxy = os.getenv("TERMINAL_RPOXY", "").strip()
+    if proxy:
+        cmd.extend(["-proxy", proxy])
+
     env = os.environ.copy()
-    env.setdefault("TWITTER_ACCOUNT", username)
+    env.setdefault("X_ACCOUNT", username)
     env.setdefault("TWITTER_COOKIE_FILE", str(cookie_path))
     env.setdefault("COOKIES_DIR", str(OUTPUT_DIR))
 
@@ -188,9 +197,9 @@ def run_scraper_smoke_test(cookie_path: Path, username: str):
 
 
 def main():
-    username = os.getenv("TWITTER_ACCOUNT", "").strip()
+    username = os.getenv("X_ACCOUNT", "").strip()
     if not username:
-        logger.error("必须通过 TWITTER_ACCOUNT 指定单个账号")
+        logger.error("必须通过 X_ACCOUNT 指定单个账号")
         return
 
     auth_token = os.getenv("X_AUTH_TOKEN", "").strip()
