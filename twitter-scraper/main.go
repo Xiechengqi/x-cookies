@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -74,6 +75,7 @@ const (
 // loadCookiesFromFile 加载 cookies，模拟 tee-worker 的完整流程
 func loadCookiesFromFile(scraper *Scraper, cookieFile string) ([]*http.Cookie, error) {
 	log.Printf("Loading cookies from file: %s", cookieFile)
+	start := time.Now()
 
 	// 先登出，模拟 tee-worker 的行为
 	if err := scraper.Logout(); err != nil {
@@ -90,7 +92,7 @@ func loadCookiesFromFile(scraper *Scraper, cookieFile string) ([]*http.Cookie, e
 		return nil, fmt.Errorf("error unmarshaling cookies: %v", err)
 	}
 
-	log.Printf("Loaded %d cookies from file", len(cookies))
+	log.Printf("Loaded %d cookies from file (took %s)", len(cookies), time.Since(start))
 
 	// 验证关键 cookies
 	var hasAuthToken, hasCSRFToken bool
@@ -105,11 +107,11 @@ func loadCookiesFromFile(scraper *Scraper, cookieFile string) ([]*http.Cookie, e
 
 		if cookie.Name == "auth_token" {
 			hasAuthToken = true
-			log.Printf("Found auth_token cookie")
+			log.Printf("Found auth_token cookie (len=%d)", len(cookie.Value))
 		}
 		if cookie.Name == "ct0" {
 			hasCSRFToken = true
-			log.Printf("Found CSRF token cookie")
+			log.Printf("Found CSRF token cookie (len=%d)", len(cookie.Value))
 		}
 	}
 
@@ -138,6 +140,7 @@ func buildDirectHTTPClient(proxyAddr string) (*http.Client, error) {
 	}
 
 	if proxyAddr == "" {
+		log.Println("Direct verification client configured without proxy")
 		return client, nil
 	}
 
@@ -147,6 +150,7 @@ func buildDirectHTTPClient(proxyAddr string) (*http.Client, error) {
 			return nil, err
 		}
 		transport.Proxy = http.ProxyURL(proxyURL)
+		log.Printf("Direct verification client using HTTP proxy: %s", proxyURL.Redacted())
 		return client, nil
 	}
 
@@ -169,6 +173,7 @@ func buildDirectHTTPClient(proxyAddr string) (*http.Client, error) {
 			auth = &proxy.Auth{User: username, Password: password}
 		}
 
+		log.Printf("Direct verification client preparing SOCKS5 proxy: %s", proxyURL.Redacted())
 		dialSocksProxy, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, baseDialer)
 		if err != nil {
 			return nil, fmt.Errorf("error creating socks5 proxy: %w", err)
@@ -178,6 +183,7 @@ func buildDirectHTTPClient(proxyAddr string) (*http.Client, error) {
 			return nil, fmt.Errorf("failed to assert socks5 dialer type")
 		}
 		transport.DialContext = contextDialer.DialContext
+		log.Println("Direct verification client using SOCKS5 proxy successfully")
 		return client, nil
 	}
 
@@ -190,6 +196,7 @@ func verifyCookiesDirectly(cookies []*http.Cookie, proxyAddr string) error {
 	if err != nil {
 		return fmt.Errorf("failed to build verification http client: %w", err)
 	}
+	log.Printf("Starting direct cookie verification via %s proxy", map[bool]string{true: "configured", false: "no"}[proxyAddr != ""])
 
 	verifyURL, err := url.Parse(verifyEndpoint)
 	if err != nil {
@@ -220,11 +227,25 @@ func verifyCookiesDirectly(cookies []*http.Cookie, proxyAddr string) error {
 	req.Header.Set("Referer", "https://twitter.com/")
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 
+	dumpReq, err := httputil.DumpRequestOut(req, false)
+	if err == nil {
+		log.Printf("Verification request headers:\n%s", string(dumpReq))
+	} else {
+		log.Printf("Failed to dump verification request: %v", err)
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("verification request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	dumpResp, err := httputil.DumpResponse(resp, false)
+	if err == nil {
+		log.Printf("Verification response headers:\n%s", string(dumpResp))
+	} else {
+		log.Printf("Failed to dump verification response: %v", err)
+	}
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {

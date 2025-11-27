@@ -18,7 +18,7 @@ logger.add(
     format="<g>{time:YYYY-MM-DD HH:mm:ss}</g> | {level} | {message}",
 )
 
-COOKIE_NAMES = ["personalization_id", "kdt", "twid", "ct0", "auth_token", "att"]
+COOKIE_NAMES = ["guest_id", "__cf_bm", "twid", "ct0", "auth_token", "gt"]
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
