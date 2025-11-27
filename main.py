@@ -108,16 +108,35 @@ def connect_existing_browser(playwright):
     return browser, context, page
 
 
-def login_with_token(context, auth_token: str) -> bool:
-    """使用 auth_token Cookie 执行快速登录。"""
+def get_primary_page(context):
+    """返回一个可用页面，并确保关闭多余标签。"""
 
-    # 关闭多余标签页确保操作的是首个页面
     for extra_page in context.pages[1:]:
         try:
             extra_page.close()
         except Exception:
             pass
-    page = context.pages[0] if context.pages else context.new_page()
+    return context.pages[0] if context.pages else context.new_page()
+
+
+def is_logged_in(context, timeout: int = 10_000) -> bool:
+    """判断当前页面是否已登录 X。"""
+
+    page = get_primary_page(context)
+    page.goto("https://x.com/home", wait_until="domcontentloaded")
+    page.wait_for_timeout(3_000)
+
+    try:
+        page.wait_for_selector("span:has-text(\"Post\")", timeout=timeout)
+        return True
+    except PlaywrightTimeoutError:
+        return False
+
+
+def login_with_token(context, auth_token: str) -> bool:
+    """使用 auth_token Cookie 执行快速登录。"""
+
+    page = get_primary_page(context)
 
     logger.info("准备注入 auth_token Cookie")
     page.goto("https://x.com", wait_until="domcontentloaded")
@@ -137,16 +156,12 @@ def login_with_token(context, auth_token: str) -> bool:
     context.add_cookies([cookie])
     logger.info("auth_token 注入完成，刷新页面进行验证")
 
-    page.goto("https://x.com/", wait_until="domcontentloaded")
-    page.wait_for_timeout(5_000)
-
-    try:
-        page.wait_for_selector("span:has-text(\"Post\")", timeout=15_000)
+    if is_logged_in(context):
         logger.success("检测到 Post 按钮，登录成功")
         return True
-    except PlaywrightTimeoutError:
-        logger.error("未检测到 Post 按钮，疑似被风控（X Locking）")
-        return False
+
+    logger.error("未检测到 Post 按钮，疑似被风控（X Locking）")
+    return False
 
 
 def run_scraper_smoke_test(cookie_path: Path, username: str):
@@ -204,17 +219,23 @@ def main():
 
     auth_token = os.getenv("X_AUTH_TOKEN", "").strip()
     if not auth_token:
-        logger.error("必须通过 X_AUTH_TOKEN 提供登录凭证")
-        return
+        logger.warning("未提供 X_AUTH_TOKEN，若浏览器未登录将无法自动注入凭证")
     logger.info(f"将使用用户名标识导出文件：{username}")
 
     with sync_playwright() as playwright:
         browser = None
         try:
             browser, context, _ = connect_existing_browser(playwright)
-            if not login_with_token(context, auth_token):
-                logger.error("登录失败，无法提取 Cookies")
-                return
+            if is_logged_in(context):
+                logger.success("检测到现有登录态，跳过 auth_token 注入")
+            else:
+                logger.info("未检测到现有登录态，尝试通过 auth_token 自动登录")
+                if not auth_token:
+                    logger.error("当前未登录且缺少 X_AUTH_TOKEN，无法继续")
+                    return
+                if not login_with_token(context, auth_token):
+                    logger.error("登录失败，无法提取 Cookies")
+                    return
             cookies = extract_cookies(context)
             payload = build_cookie_payload(cookies)
             cookie_path = save_cookies(username, payload)
